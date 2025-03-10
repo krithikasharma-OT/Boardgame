@@ -120,12 +120,22 @@
 	 <distributionManagement>
         <repository>
             <id>maven-releases</id>
-            <url>http://43.205.242.45:8081/repository/maven-releases/</url>
+            <url>http://192.168.29.232:8081/repository/maven-releases/</url>
         </repository>
         <snapshotRepository>
             <id>maven-snapshots</id>
-            <url>http://43.205.242.45:8081/repository/maven-snapshots/</url>
+            <url>http://192.168.29.232:8081/repository/maven-snapshots/</url>
         </snapshotRepository>
     </distributionManagement>
+
+<repositories>
+    <repository>
+            <id>maven-snapshots</id>
+            <name>maven-releases</name>
+            <!-- add your nexus server url here -->
+            <url>http://192.168.29.232:8081/repository/maven-snapshots/</url>
+    </repository>
+    </repositories>
+	
 
 </project>
