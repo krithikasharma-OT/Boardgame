@@ -68,23 +68,26 @@ pipeline {
         }
     }
     
-    /*
+    
 
     stage('Build tag docker image'){
         steps{
             script{
-                withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker')
-                sh "docker build -t  shopping-cart:dev -f docker/Dockerfile ."
-                sh "docker tag shopping-cart:dev krithikasharma/shopping-cart:dev"
+                
+                withDockerRegistry(credentialsId: 'Docker-Cred', toolName: 'docker') {
+                    sh "docker build -t  boardgame:v1 -f Dockerfile ."
+                    sh "docker tag boardgame:v1 krithikasharma/boardgame:v1"
+                }
             }
         }
     }
-
+    
     stage(' Push docker image'){
         steps{
             script{
-                withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker')
-                sh "docker push krithikasharma/shopping-cart:dev"
+                withDockerRegistry(credentialsId: 'Docker-Cred', toolName: 'docker'){
+                   sh "docker push krithikasharma/boardgame:v1"
+                }
             }
         }
     }
@@ -92,11 +95,11 @@ pipeline {
     stage(' Deploy Application container'){
         steps{
             script{
-                withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker')
-                sh "docker run -d --name ekart -p 8070:8070 krithikasharma/shopping-cart:dev"
+                withDockerRegistry(credentialsId: 'Docker-Cred', toolName: 'docker'){
+                    sh "docker run -d --name boardgame -p 8090:8090 krithikasharma/boardgame:v1"
+                }
             }
         }
     }
-    */
-    }
+}
 }
