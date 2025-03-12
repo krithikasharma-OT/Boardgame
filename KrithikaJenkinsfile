@@ -1,0 +1,150 @@
+pipeline {
+    
+    agent any 
+    /*
+    agent {
+        label 'UbuntuSlave'
+    }*/
+
+    tools{
+        jdk 'MyJDK17'
+        maven 'MyMaven3.9'
+    }
+
+    environment{
+        SCANNER_HOME = tool 'MySonarQubeScanner'
+        JAVA_HOME = tool('MyJDK17') 
+        PATH = "${JAVA_HOME}/bin:${env.PATH}" 
+        SLACK_TOKEN=credentials('SlackCred')
+    }
+    
+    parameters {
+        booleanParam(name: 'RUN_TRIVY_SCAN', defaultValue: false, description: 'Enable to scan Trivy FileSystem')
+        booleanParam(name: 'RUN_SONAR', defaultValue: false, description: 'Enable to run SonarQube Analysis')
+        booleanParam(name: 'RUN_NEXUS', defaultValue: false, description: 'Enable to push artifacts to Nexus')
+        booleanParam(name: 'TRIVY_SCAN', defaultValue: false, description: 'Enable to Docker image Trivy Scan')
+    }
+
+    stages {
+        stage('Code checkout'){
+            steps {
+               git branch: 'main',  credentialsId: 'GitHubSSHKey', url: 'git@github.com:krithikasharma-OT/PrivBoardGame.git' //private repo for this repo
+            }
+        }
+    
+        
+        stage('Compile') {
+            steps {
+                sh "mvn compile"
+            }
+        }
+
+        stage ('Trivy File sytem Scan') {
+            when {
+                expression { params.RUN_TRIVY_SCAN }
+            }
+            steps {
+                sh "trivy fs ."
+            }
+        }
+         
+        
+        stage('Sonar analysis') {
+            when {
+                expression { params.RUN_SONAR }
+            }
+            steps {
+                withSonarQubeEnv('SonarConf') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=Board \
+                        -Dsonar.sources=src \
+                        -Dsonar.java.binaries=target/classes \
+                        -Dsonar.projectKey=Board '''
+                }
+            }
+        }
+    
+        stage('Code-Build'){
+            steps{
+                sh "mvn  package " /*-DskipTests=true*/
+            }
+        }
+
+    stage('Deploy to nexus'){
+        when {
+                expression { params.RUN_NEXUS }
+            }
+        steps{
+            configFileProvider([configFile(fileId: 'MyGlobalSettings', variable: 'MyMavenSettings')]) {
+                sh "mvn -s $MyMavenSettings clean deploy"
+            }
+        }
+    }
+    
+    
+
+    stage('Build tag docker image'){
+        steps{
+            script{
+                    sh " docker build -t  boardgame:v2 -f Dockerfile ."
+                    sh " docker tag boardgame:v2 krithikasharma/boardgame:v2"
+                
+            }
+        }
+    }
+    
+    stage('Trivy Docker Image Scan') {
+        when {
+            expression { return params.TRIVY_SCAN }  
+        }
+        steps {
+            script {
+                sh """
+                    echo "Running Trivy scan on Docker image..."
+                    trivy image --exit-code 1 --severity HIGH,CRITICAL krithikasharma/boardgame:v2 || true
+                """
+                }
+            }
+        }
+    
+    stage(' Push docker image'){
+        steps{
+            script{
+                withCredentials([string(credentialsId: 'docker-passwd', variable: 'DOCKER_PASSWORD')]) {
+                    sh " docker login -u krithikasharma -p ${DOCKER_PASSWORD}" 
+                    sh " docker push krithikasharma/boardgame:v2"
+                }
+            }
+        }
+    }
+    
+
+    stage(' Deploy Application container'){
+        steps{
+            script{
+                withCredentials([string(credentialsId: 'docker-passwd', variable: 'DOCKER_PASSWORD')]) {
+                    sh "docker ps -aq --filter 'name=board' | xargs -r docker rm -f"
+                    sh " docker run -d  --name boardgame -p 8090:8080 krithikasharma/boardgame:v2"
+                }
+            }
+        }
+    }
+    }
+    
+    
+    post{ 
+        success{ 
+            script{ 
+                slackSend(channel: "#jenkins", message: "Job ${JOB_NAME} at build ${BUILD_NUMBER} ran successfully. Check ", color: 'good', tokenCredentialId: 'SlackCred')
+            }
+        } 
+
+        failure{ 
+
+            script{ 
+                slackSend(channel: "#jenkins", message: "Job ${JOB_NAME} Failed! Check logs ${BUILD_URL}", color: 'danger', tokenCredentialId: 'SlackCred')
+            }
+                
+        }
+    } 
+    
+}
